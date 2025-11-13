@@ -4,6 +4,12 @@ import pandas as pd
 import datetime
 import create_object as co
 import duckdb
+import logging
+
+from config.palettes import PALETTES
+
+# Streamlit 起動時にログを設定しておくと綺麗に出る
+logging.basicConfig(level=logging.ERROR, format="%(levelname)s:%(message)s")
 
 # -----------------------------------------
 #          csvからデータを読み込み
@@ -37,7 +43,8 @@ st.title('📊 注文データ分析ダッシュボード')
 # -----------------------------------------
 # メニューの設定等に必要な一覧を取得
 # products_list = df['product_code'].unique()
-mode_list = ['比較', 'スポット']
+mode_list = ['時系列分析', '月別詳細']
+
 
 st.sidebar.header('分析設定')
 
@@ -45,15 +52,28 @@ st.sidebar.header('分析設定')
 mode = st.sidebar.selectbox('分析タイプを選んでください', mode_list)
 
 # 日付選択  
-if mode == '比較':
+if mode == '時系列分析':
     # データ読み込み時に最小と最大を取得して変数格納したい
-    start_date = st.sidebar.date_input('開始日', datetime.date(2024, 9, 1))
-    end_date = st.sidebar.date_input('終了日', datetime.date(2025, 8, 31))
+    start_date = st.sidebar.selectbox(
+        '開始月',
+        [f'2024-{m:02d}' for m in range(9, 13)] + [f'2025-{m:02d}' for m in range(1, 9)]
+        )
+    end_date = st.sidebar.selectbox(
+        '終了月',
+        [f'2024-{m:02d}' for m in range(9, 13)] + [f'2025-{m:02d}' for m in range(1, 9)]
+        )
 else:
     target_month = st.sidebar.selectbox(
         '分析対象月を選択してください',
         [f'2024-{m:02d}' for m in range(9, 13)] + [f'2025-{m:02d}' for m in range(1, 9)]
         )
+
+# カラーテーマ設定
+palette_name = st.sidebar.selectbox(
+    'カラーテーマを選択してください 🎨',
+    list(PALETTES.keys()),
+    index=0
+)
 
 # 送信ボタン
 submit_button = st.sidebar.button(label = '分析開始')
@@ -89,14 +109,14 @@ submit_button = st.sidebar.button(label = '分析開始')
 if submit_button:
     ###### 分析 ######
     # st.success(f'{mode}モードでデータを分析中...')
-    if mode == '比較':
+    if mode == '時系列分析':
         df_filtered = co.filter_data(mode, df, start_date=start_date, end_date=end_date)
     else:
         df_filtered = co.filter_data(mode, df, target_month=target_month)
 
     ###### グラフ表示 ######
     # グラフの描写
-    if mode == '比較':
+    if mode == '時系列分析':
         try:
             fig_new = co.plot_flow(df_filtered, kind='new')
             st.plotly_chart(fig_new, use_container_width=True)
@@ -131,10 +151,12 @@ if submit_button:
             
             # 下段右カラム
             with col4:
-                fig_flow_repeat = co.draw_spot_flow_repeat(df_filtered)
+                fig_flow_repeat = co.draw_spot_flow_repeat(df_filtered, palette_name)
                 st.plotly_chart(fig_flow_repeat, use_container_width=True)
-        except:
-            print('グラフ作成に失敗しました')
+        except Exception as e:
+            # UI には出さない
+            # エラーはターミナルに出す
+            logging.exception("グラフ作成中にエラー発生")
     
     # csvとしてダウンロードするボタン
     st.download_button(
